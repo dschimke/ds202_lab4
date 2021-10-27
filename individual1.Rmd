@@ -1,0 +1,177 @@
+---
+title: "Lab 4"
+author: "Daniel Schimke"
+date: "10/24/2021"
+output: html_document
+---
+
+# Part 1
+
+```{r}
+library(tidyverse)
+library(readxl)
+
+defense <- read_excel('cyclonesFootball2020.xlsx', sheet='Defensive')
+offense <- read_excel('cyclonesFootball2020.xlsx', sheet='Offensive')
+biography <- read_excel('cyclonesFootball2020.xlsx', sheet='Biography')
+
+str(defense)
+str(offense)
+str(biography)
+```
+
+
+## Question 1
+
+```{r}
+defense1 <- defense %>% mutate(Name = factor(Name)) %>% mutate(Opponent_Opponent = factor(Opponent_Opponent))
+offense1 <- offense %>% mutate(Name = factor(Name)) %>% mutate(Opponent_Opponent = factor(Opponent_Opponent))
+biography1 <- biography %>% mutate(Name = factor(Name))
+
+
+str(defense1)
+str(offense1)
+str(biography1)
+```
+
+
+## Question 2
+
+```{r}
+defense2 <- defense1 %>% mutate(across(Tackles_Solo:Pass_PB, as.numeric))
+offense2 <- offense1 %>% mutate(across(Receiving_REC:Passing_INT, as.numeric))
+biography2 <- biography1 %>% mutate(Weight = as.numeric(Weight))
+
+str(defense2)
+str(offense2)
+str(biography2)
+```
+
+
+## Question 3
+
+```{r}
+#Change Height to inches
+biography3 <- biography2 %>% separate(Height,c("feet", "inches"),sep="-", convert=TRUE,remove=FALSE) %>% mutate(Height = 12*feet+inches) %>% select(-feet,-inches)
+
+str(biography3)
+```
+
+
+## Question 4
+
+```{r}
+defense3 <- defense2 %>% group_by(Name,Opponent_Opponent) %>% mutate(game_num = row_number()) %>% ungroup()
+offense3 <- offense2 %>% group_by(Name,Opponent_Opponent) %>% mutate(game_num = row_number()) %>% ungroup()
+
+defClean <- defense3
+offClean <- offense3
+bioClean <- biography3
+
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+
+
+
+# Part 2
+
+
+## Question 1
+
+```{r}
+offClean1 <- offClean %>% pivot_longer(cols=Receiving_REC:Passing_INT, names_to="stat", values_to="value")
+head(offClean1)
+```
+
+
+## Question 2
+
+```{r}
+offStats <- offClean1 %>% group_by(Name,stat) %>% summarize(sums = sum(value, na.rm=TRUE))
+offStats
+```
+
+
+## Question 3
+
+```{r}
+ggplot(offStats, aes(y=sums)) + geom_boxplot() + facet_wrap(~stat, scales="free") + ggtitle("Distributions of Offensive Statistics")
+```
+
+The trends seen from these graphs make sense when looking at each of them. There is very little for any of the passing statistics except for a single point that is way higher than the rest. This point is Brock Purdy's statistics. He is the starting quarterback so he makes almost every single pass for the team. The rest of those that have any passing statistics are the backup quarterbacks that hardly play and maybe a couple of the other players if there was a trick play where the quarterback didn't throw the ball. 
+
+The receiving stats have the biggest distribution between the values. This is because a football team has many top receivers so there are options for who to throw to should the best receiver be covered. There is still an outlier at the high end. This is likely the top receiver for the team as most teams usually have one receiver that is better than the others. 
+
+The rushing stats look much more like the passing stats but with a few more people that have stats for this. The top point for each of these is the starting and main running back for the team. In this case, this is Breece Hall for Iowa State. The other points are the other running backs for the team that are not as good and don't get the ball as much. One of the points is also likely the quarterback Brock Purdy because the quarterback will sometimes decide to run for yards during a pass play if there is no one open. 
+
+Overall, there are very large outliers in the data for each of the best players in every position. These values shown make sense for the game of football and this is what is expected.
+
+
+## Question 4
+
+```{r}
+gameComparison <- offClean1 %>% filter(Opponent_Opponent == "Oklahoma"|Opponent_Opponent=="Oregon") %>% filter(stat=="Receiving_YDS") %>% group_by(Name, Opponent_Opponent) %>% summarize(value=mean(value,na.rm=TRUE)) %>% mutate(value= ifelse(is.nan(value),0,value)) %>% pivot_wider(names_from=Opponent_Opponent, values_from=value) %>% mutate(Oregon= ifelse(is.na(Oregon),0,Oregon))
+
+ggplot(gameComparison, aes(x=Oklahoma,y=Oregon)) + geom_point() + geom_abline(slope=1, intercept=0, color="red") + xlim(-5,100) + ylim(-5,100) + ggtitle("Receiving Yards Comparison from Oregon and Oklahoma") + xlab("Receiving Yards against Oklahoma") + ylab("Receiving Yards against Oregon")
+```
+
+Since there was 2 games against Oklahoma, I took the average yards between the games for each of the receivers to show in the graph. The red line through the graph represents where the values for each of the games would be equal. So, this means that anything above this line is where a receiver had more yards against Oregon than Oklahoma, and anything below the line is a receiver that had more yards against Oklahoma. 
+
+We can clearly see from this graph that every single point is below the red line. This means that Iowa State played better offense when playing against Oklahoma than against Oregon. 
+
+
+## The Other Question 4
+
+```{r}
+bioClean1 <- bioClean %>% separate(Hometown, into=c("City", "State"), sep=",")
+head(bioClean1)
+```
+
+
+
+## Question 5
+
+```{r}
+bioClean1 %>% group_by(State) %>% summarize(n())
+```
+
+There are members from 20 different states as well as a single person from Australia. Unsurprisingly, Iowa is the most common state people are from. I was a bit surprised that 14 people are from Florida. 
+
+## Question 6
+
+```{r}
+offClean1 %>% filter(Name=="Purdy, Brock") %>% filter(stat=="Passing_YDS") %>% filter(value >mean(value))
+
+#Good games are those that he got above his average number of passing yards
+goodGames <- c("Oklahoma","Texas Tech","Kansas","Kansas State","Texas","West Virginia")
+
+offClean2 <- offClean1 %>% mutate(Quality = ifelse(Opponent_Opponent %in% goodGames,"Good","Bad")) %>% filter(stat=="Receiving_YDS"|stat=="Rushing_YDS") %>% group_by(Opponent_Opponent,stat,Quality,game_num) %>% summarize(yards=sum(value, na.rm=TRUE)) %>% pivot_wider(names_from=stat, values_from=yards)
+
+defClean1 <- defClean %>% mutate(Quality = ifelse(Opponent_Opponent %in% goodGames,"Good","Bad")) %>% group_by(Opponent_Opponent,game_num) %>% mutate(Tackles_Solo = sum(Tackles_Solo)) %>% mutate(Tackles_ASST=sum(Tackles_ASST)) %>% select(Opponent_Opponent,Tackles_Solo,Tackles_ASST,Quality) %>% unique()
+
+ggplot(offClean2, aes(x=Receiving_YDS,y=Rushing_YDS,color=Quality)) + geom_point() + ggtitle("Offensive Stats for Purdy's Games") + xlab("Receiving Yards") + ylab("Rushing Yards")
+
+ggplot(defClean1, aes(x=Tackles_Solo,y=Tackles_ASST,color=Quality)) + geom_point() + ggtitle("Defensive Stats for Purdy's Games")
+
+```
+
+I determined whether or not Brock Purdy had a good game by comparing the values of each game to his average passing yards. Anything above this is a good game and anything below is a bad game. I then added a column to show which games were good and which were bad, and made the graphs.
+
+From the offensive stats graph, I compared the receiving and rushing yards for the good and bad games. There is an obvious difference between the receiving yards for the good and bad games. This makes sense because there will always be more receiving yards if the quarterback has more passing yards. All of the rushing yards for the bad games are in the middle when it comes to rushing yards as a whole. There were no bad games where there were very few rushing yards or a lot of rushing yards. This also makes sense because if it is a bad Purdy day, it could mean the opponent is difficult so there is less rushing yards as well, and it is difficult to get a lot of rushing yards with almost no passing yards because getting first downs with only rushing is very hard.
+
+This graph also shows the inconsistency of Brock Purdy because the receiving yards of the receivers is either very high or very low. There is not much between these points. This could be down to the team, but could also be true of college football as a whole because there is a tendency for games to be very high or low scoring.
+
+
+Moving into the defensive statistics, it is much harder to see a trend. We can see the games where a lot of tackles were made were bad games. This makes sense because the defense is going to be on the field more and have to make tackles if the offense is playing poorly. The bad games that there are very few tackles were most likely a blowout game where Iowa State was unable to do anything on offense or defense leading to the opponent scoring a large number of points and Iowa State scoring very little.
+
+The good games have a general trend of the defense making an average number of tackles. This likely means that the team is clicking well on both sides and neither side is on the field for much longer than the other. These are going to be the close games where both teams are scoring points and is very competitive.
+
+
+Overall, we can see a trend for both the offense and defense based on if Brock Purdy is playing well or not. This is what was expected as the quarterback is the most important position on the field, so the team is likely to play bad if the quarterback is having an off day.
+
+
+
+
